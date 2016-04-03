@@ -115,11 +115,15 @@ public class Main extends AppCompatActivity implements
         // Compass
         SensorManager mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         Sensor mSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
-        mSensorManager.registerListener(mSensorEventListener, mSensor, SensorManager.SENSOR_DELAY_FASTEST);
+        mSensorManager.registerListener(mSensorCompassEventListener, mSensor, SensorManager.SENSOR_DELAY_FASTEST);
+
+        // Accelerometer
+        mSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
+        mSensorManager.registerListener(mSensorAccelerationEventListener , mSensor, SensorManager.SENSOR_DELAY_FASTEST);
     }
 
     // Compass
-    private SensorEventListener mSensorEventListener = new SensorEventListener() {
+    private SensorEventListener mSensorCompassEventListener = new SensorEventListener() {
         float[] orientation = new float[3];
         float[] rMat = new float[9];
 
@@ -131,6 +135,18 @@ public class Main extends AppCompatActivity implements
                 SensorManager.getRotationMatrixFromVector(rMat, event.values);
                 mAzimuth = (int) (Math.toDegrees(SensorManager.getOrientation(rMat, orientation)[0]) + 360) % 360;
                 sendMsg("direction", mAzimuth+"");
+            }
+        }
+    };
+
+    // Acceleration
+    private SensorEventListener mSensorAccelerationEventListener = new SensorEventListener() {
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {}
+
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
+                sendMsg("acceleration", event.values[0] + " " + event.values[1] + " " + event.values[2]);
             }
         }
     };
