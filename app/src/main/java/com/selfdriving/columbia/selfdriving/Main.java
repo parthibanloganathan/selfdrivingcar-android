@@ -1,18 +1,19 @@
 package com.selfdriving.columbia.selfdriving;
 
-import android.bluetooth.BluetoothDevice;
 import android.content.Context;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
-import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
+import android.text.TextUtils;
 
+import com.github.nkzawa.socketio.client.IO;
+import com.github.nkzawa.socketio.client.Socket;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.location.LocationListener;
@@ -20,14 +21,8 @@ import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationSettingsRequest;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.util.List;
+import java.net.URISyntaxException;
 import java.util.Locale;
-import java.util.Set;
-
-import co.lujun.lmbluetoothsdk.BluetoothController;
 
 public class Main extends AppCompatActivity implements
         GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, LocationListener {
@@ -43,9 +38,9 @@ public class Main extends AppCompatActivity implements
     // Compass
     private int mAzimuth = 0;
 
-    // Bluetooth
-    private OutputStream outputStream;
-    private InputStream inStream;
+    // Sockets
+    private Socket mSocket;
+
 
     protected void onStart() {
         mGoogleApiClient.connect();
@@ -57,6 +52,13 @@ public class Main extends AppCompatActivity implements
         super.onStop();
     }
 
+    private void sendMsg(String type, String message) {
+        if (TextUtils.isEmpty(message)) {
+            return;
+        }
+        mSocket.emit(type, message);
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -64,17 +66,13 @@ public class Main extends AppCompatActivity implements
 
         System.out.println("Initialized");
 
-        // Bluetooth
-        BluetoothController mBTController = BluetoothController.getInstance().build(getApplicationContext());
-        Set<BluetoothDevice> devices = mBTController.getBondedDevices();
-        for (BluetoothDevice d : devices) {
-            System.out.println(d.getName() + " " + d.getAddress());
-        }
+        // Sockets
+        try {
+            mSocket = IO.socket("http://moonshot.ngrok.com/");
+            mSocket.connect();
+        } catch (URISyntaxException e) {}
 
-        mBTController.connect("B8:E8:56:42:89:B9");
-        System.out.println(mBTController.getConnectedDevice().getName());
-        System.out.println(mBTController.getConnectedDevice().getAddress());
-        mBTController.write("Hello".getBytes());
+        sendMsg("accelerometer", "hello world");
 
         // GPS
         /*
@@ -132,7 +130,7 @@ public class Main extends AppCompatActivity implements
             if (event.sensor.getType() == Sensor.TYPE_ROTATION_VECTOR) {
                 SensorManager.getRotationMatrixFromVector(rMat, event.values);
                 mAzimuth = (int) (Math.toDegrees(SensorManager.getOrientation(rMat, orientation)[0]) + 360) % 360;
-                //System.out.println("dir: " + mAzimuth);
+                sendMsg("direction", mAzimuth+"");
             }
         }
     };
@@ -143,9 +141,7 @@ public class Main extends AppCompatActivity implements
         mLastLocation = LocationServices.FusedLocationApi.getLastLocation(
                 mGoogleApiClient);
         if (mLastLocation != null) {
-            System.out.println("Last known location");
-            System.out.println(mLastLocation.getLatitude());
-            System.out.println(mLastLocation.getLongitude());
+            sendMsg("location", mLastLocation.getLatitude() + " " + mLastLocation.getLongitude() + "-");
         }
 
         LocationServices.FusedLocationApi.requestLocationUpdates(
@@ -158,13 +154,12 @@ public class Main extends AppCompatActivity implements
     @Override
     public void onLocationChanged(Location location) {
         mCurrentLocation = location;
-        System.out.println("Current location");
         double lat = mCurrentLocation.getLatitude();
         double lon = mCurrentLocation.getLongitude();
-        System.out.println(mCurrentLocation.getAccuracy() + " m");
-        System.out.println(lat);
-        System.out.println(lon);
+        double acc = mCurrentLocation.getAccuracy();
+        sendMsg("location", lat + " " + lon + " " + acc);
 
+        /*
         List<Address> addresses  = null;
         try {
             addresses = geocoder.getFromLocation(lat,lon,1);
@@ -174,8 +169,15 @@ public class Main extends AppCompatActivity implements
         } catch (IOException e) {
             e.printStackTrace();
         }
+         */
     }
 
     @Override
     public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {}
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        mSocket.disconnect();
+    }
 }
